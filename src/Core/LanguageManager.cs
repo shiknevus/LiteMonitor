@@ -77,6 +77,18 @@ namespace LiteMonitor.src.Core
             int dot = key.IndexOf('.');
             return dot >= 0 ? key[(dot + 1)..] : key;
         }
+                public static string T(string key, string defaultValue)
+        {
+            if (_overrides.TryGetValue(key, out var overrideVal)) return UIUtils.Intern(overrideVal);
+            if (_texts.TryGetValue(key, out var val)) return UIUtils.Intern(val);
+            int dot = key.IndexOf('.');
+            if (dot >= 0)
+            {
+                string subKey = key[(dot + 1)..];
+                if (_texts.TryGetValue(subKey, out var subVal)) return UIUtils.Intern(subVal);
+            }
+            return defaultValue;
+        }
         public static string T(string key)         
         {
             // 1. 优先检查用户自定义覆盖

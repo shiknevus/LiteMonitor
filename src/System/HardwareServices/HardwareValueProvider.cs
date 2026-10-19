@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -219,6 +219,12 @@ namespace LiteMonitor.src.SystemServices
         // ===========================================================
         public float? GetStartupValue(string key)
         {
+            if (key == "DATA.DayUp" || key == "DATA.DayDown" || key == "DATA.Up" || key == "DATA.Down")
+            {
+                var todayTraffic = TrafficLogger.GetTodayStats();
+                return key.IndexOf("Down", StringComparison.OrdinalIgnoreCase) >= 0 ? todayTraffic.down : todayTraffic.up;
+            }
+
             if (_lastValidMap.TryGetValue(key, out float lastVal)) return lastVal;
 
             bool useCounter = _cfg.UseWinPerCounters && _perfManager.IsInitialized;
@@ -443,6 +449,7 @@ namespace LiteMonitor.src.SystemServices
                     case "BAT.Current":
                         result = BatteryService.GetBatteryValue(key, _manualSensorCache);
                         break;
+
 
                     // 默认分支：处理模糊匹配 (StartsWith/Contains)
                     default:

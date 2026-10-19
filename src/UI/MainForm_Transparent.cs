@@ -1,4 +1,4 @@
-using LiteMonitor.src.Core;
+﻿using LiteMonitor.src.Core;
 using LiteMonitor.src.SystemServices;
 using LiteMonitor.src.UI;
 using LiteMonitor.src.UI.Helpers;
@@ -6,6 +6,7 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -20,8 +21,9 @@ namespace LiteMonitor
         private readonly MainFormWinHelper _winHelper;
         private readonly MainFormBizHelper _bizHelper;
         private readonly int _wmTaskbarCreated;
+        private static readonly int WM_SHOW_ME = MainFormWinHelper.RegisterShowInstanceMessage();
         private const int WM_DISPLAYCHANGE = 0x007E;
-        private CancellationTokenSource _displayChangeCts;
+        private CancellationTokenSource? _displayChangeCts;
 
         private Point _dragOffset;
         private bool _uiDragging = false;
@@ -58,20 +60,22 @@ namespace LiteMonitor
         public void ShowTrayIcon() => _bizHelper.SetTrayVisible(true);
         public void RebuildMenus() => _bizHelper.RebuildMenus();
         public void ShowNotification(string title, string text, ToolTipIcon icon) => _bizHelper.ShowNotification(title, text, icon);
-        
-        // 供 Helper 调用
+
         public void ToggleLayoutMode() => _bizHelper.ToggleLayoutMode();
-        public void EnsureVisibleAndSavePos() => _bizHelper.SavePos();
-        public void ApplyRoundedCorners() => _winHelper.ApplyRoundedCorners();
         public void RefreshTopMost(bool forceReinsert = false) => _winHelper.RefreshTopMost(_cfg.TopMost, forceReinsert);
-        
-        // 供外部调用
-        public void OpenTaskManager() => _bizHelper.OpenTaskManager();
+        public void ApplyRoundedCorners() => _winHelper.ApplyRoundedCorners();
+        public void EnsureVisibleAndSavePos()
+        {
+            _bizHelper.ClampToScreen();
+            _bizHelper.SavePos();
+        }
+
         public void OpenSettings() => _bizHelper.OpenSettings();
+        public void OpenTaskManager() => _bizHelper.OpenTaskManager();
         public void OpenTrafficHistory() => _bizHelper.OpenTrafficHistory();
         public void CleanMemory() => _bizHelper.CleanMemory();
 
-        // ==== 任务栏显示 ====
+        // ==== 任务栏快捷窗口代理 ====
         private TaskbarForm? _taskbar;
 
         public void ToggleTaskbar(bool show)
@@ -101,8 +105,8 @@ namespace LiteMonitor
                     if (!_taskbar.Visible)
                     {
                         _taskbar.Show();
-                        _taskbar.ReloadLayout();
                     }
+                    _taskbar.ReloadLayout();
                 }
             }
             else
@@ -116,10 +120,58 @@ namespace LiteMonitor
             }
         }
 
-        // ========== 构造函数 ==========
+        public void ReloadTaskbar()
+        {
+            if (_taskbar != null)
+            {
+                _taskbar.Close();
+                _taskbar.Dispose();
+                _taskbar = null;
+            }
+            if (_cfg.ShowTaskbar)
+            {
+                ToggleTaskbar(true);
+            }
+        }
+
+        // ==== 桌面灵动胶囊悬浮栏 (FloatBar) ====
+        private FloatBarForm? _floatBar;
+
+        public void ToggleFloatBar(bool show)
+        {
+            if (show)
+            {
+                if (_floatBar == null || _floatBar.IsDisposed)
+                {
+                    if (_ui != null)
+                    {
+                        _floatBar = new FloatBarForm(_cfg, _ui, this);
+                        _floatBar.Show();
+                    }
+                }
+                else
+                {
+                    if (!_floatBar.Visible)
+                    {
+                        _floatBar.Show();
+                    }
+                    _floatBar.RedrawLayeredWindow();
+                }
+            }
+            else
+            {
+                if (_floatBar != null)
+                {
+                    _floatBar.Close();
+                    _floatBar.Dispose();
+                    _floatBar = null;
+                }
+            }
+        }
+
         public MainForm()
         {
-            // 语言加载
+            // 语言初始化
             if (string.IsNullOrEmpty(_cfg.Language))
             {
                 string sysLang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.ToLower();
@@ -129,8 +181,7 @@ namespace LiteMonitor
             LanguageManager.Load(_cfg.Language);
             _cfg.SyncToLanguage();
 
-            // 1. 初始化业务
-            // ★★★ Fix: 初始化全局 DPI 缩放系数，防止未打开设置面板时弹窗排版异常 ★★★
+            // 1. 初始化 DPI 缩放系数
             UIUtils.ScaleFactor = this.DeviceDpi / 96f;
 
             TrafficLogger.Load();
@@ -140,37 +191,38 @@ namespace LiteMonitor
             _ui = new UIController(_cfg, this);
             new src.WebServer.LiteWebServer(_cfg);
 
-            // 5. 设置背景色 (这是关键！解耦时漏掉了这行，导致背景是系统默认色而非透明或皮肤色)
+            // 基础样式
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+
             BackColor = ThemeManager.ParseColor(ThemeManager.Current.Color.Background);
 
             // 2. 初始化双助手
             _winHelper = new MainFormWinHelper(this);
             
-            //资源管理器重启监听
+            // 资源管理器重启监听
             _wmTaskbarCreated = MainFormWinHelper.RegisterTaskbarCreatedMessage();
 
-            // ★★★ 关键修复：补全 SetStyle 调用，开启透明支持 ★★★
-            // 原始代码中这里调用了 SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-            // 解耦时漏掉了这一行，导致背景无法透明，显示为黑色或系统默认色
             SetStyle(ControlStyles.SupportsTransparentBackColor, true);
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
 
             _winHelper.InitializeStyle(_cfg.TopMost, _cfg.ClickThrough);
-
-            // 原始代码还原：这里需要手动设置 Opacity = 0，
-            // 但是要在构造函数里设置，和原始代码保持一致的位置
             this.Opacity = 0; 
 
             _bizHelper = new MainFormBizHelper(this, _cfg, _ui, _winHelper);
             _bizHelper.Initialize();
 
-            // === 渐入透明度 (还原原始代码逻辑) ===
-            // 原始代码是在构造函数末尾启动 Task
-            // 之前解耦时移到了 OnShown 里，这可能导致时序差异（OnShown 之前会有一瞬间的默认绘制）
             _winHelper.StartFadeIn(_cfg.Opacity);
 
             // 3. 事件绑定
             BindEvents();
+
+            // 启动时确保灵动胶囊悬浮栏展示
+            if (_cfg.FloatBarEnabled)
+            {
+                ToggleFloatBar(true);
+            }
         }
 
         private void BindEvents()
@@ -226,6 +278,12 @@ namespace LiteMonitor
             _bizHelper.ForceShow();
             _winHelper.RefreshTopMost(_cfg.TopMost, forceReinsert: true);
             _bizHelper.RebuildMenus();
+
+            if (_cfg.FloatBarEnabled && _floatBar != null)
+            {
+                _floatBar.Show();
+                _floatBar.RedrawLayeredWindow();
+            }
         }
 
         public void HideMainWindow()
@@ -238,20 +296,27 @@ namespace LiteMonitor
 
         protected override void WndProc(ref Message m)
         {
+            if (m.Msg == WM_SHOW_ME && WM_SHOW_ME != 0)
+            {
+                this.BeginInvoke(new Action(() =>
+                {
+                    ShowMainWindow();
+                    _bizHelper.OpenSettings();
+                }));
+                return;
+            }
+
             if (m.Msg == _wmTaskbarCreated && _wmTaskbarCreated != 0)
             {
-                // [Fix] Explorer 重启后，子窗口 TaskbarForm 会被销毁或失效。
-                // 必须由主窗口感知并重建 TaskbarForm，才能恢复显示。
                 if (_cfg.ShowTaskbar)
                 {
-                    // 延迟执行，确保 Explorer 初始化基本完成，同时避免阻塞消息泵
                     this.BeginInvoke(new Action(async () =>
                     {
                         try 
                         {
-                            await Task.Delay(3000); // 等待3秒让Explorer缓口气
-                            ToggleTaskbar(false);   // 彻底销毁旧实例
-                            ToggleTaskbar(true);    // 创建新实例(新实例自带重试机制)
+                            await Task.Delay(3000);
+                            ToggleTaskbar(false);
+                            ToggleTaskbar(true);
                         }
                         catch { }
                     }));
@@ -260,17 +325,19 @@ namespace LiteMonitor
 
             if (m.Msg == WM_DISPLAYCHANGE)
             {
-                // [Fix #288] 分辨率改变后，延迟执行位置恢复，确保 Screen.AllScreens 已完全更新
-                // 增加防抖机制，避免短时间内多次触发
                 _displayChangeCts?.Cancel();
-                _displayChangeCts = new System.Threading.CancellationTokenSource();
+                _displayChangeCts = new CancellationTokenSource();
                 var token = _displayChangeCts.Token;
 
                 Task.Delay(500, token).ContinueWith(t => 
                 {
                     if (!t.IsCanceled)
                     {
-                        this.BeginInvoke(new Action(() => _bizHelper?.RestorePos()));
+                        this.BeginInvoke(new Action(() => 
+                        {
+                            _bizHelper?.RestorePos();
+                            _floatBar?.AlignToTop();
+                        }));
                     }
                 });
             }
@@ -312,11 +379,11 @@ namespace LiteMonitor
                 this.Size = new Size(this.Width, this.Height);
             }
             
-            // 移除了 StartFadeIn 调用，因为它已经还原回构造函数了
             _winHelper.ApplyRoundedCorners();
             _bizHelper.KeepVisible(3.0); // 启动保护期
 
             if (_cfg.ShowTaskbar) ToggleTaskbar(true);
+            if (_cfg.FloatBarEnabled) ToggleFloatBar(true);
 
             // 启动 WebServer
             if (_cfg.WebServerEnabled)
@@ -328,12 +395,12 @@ namespace LiteMonitor
                          ToolTipIcon.Error);
                 }
             }
-            // 这样既检查了驱动，也检查了更新，以及置顶 透明度 穿透 等，而且时机完美（窗口显示后）
+
             if (_bizHelper != null)
             {
                  _ = _bizHelper.RunStartupChecksAsync();
             }
-            // [Fix] 强制置顶刷新，增加重试机制确保在某些系统环境下依然生效
+
             if (_cfg.TopMost)
             {
                 this.BeginInvoke(new Action(async () =>
@@ -355,6 +422,7 @@ namespace LiteMonitor
             
             _ui?.Dispose();
             _bizHelper.Dispose();
+            _floatBar?.Dispose();
         }
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
@@ -96,6 +96,21 @@ namespace LiteMonitor
             };
 
             modeRoot.DropDownItems.Add(taskbarMode);
+
+            // === 灵动胶囊悬浮条 (FloatBar) ===
+            var floatBarMode = new ToolStripMenuItem(LanguageManager.T("Menu.FloatBarShow", "灵动悬浮条(Float Bar)"))
+            {
+                Checked = cfg.FloatBarEnabled
+            };
+
+            floatBarMode.Click += (_, __) =>
+            {
+                cfg.FloatBarEnabled = !cfg.FloatBarEnabled;
+                cfg.Save();
+                AppActions.ApplyVisibility(cfg, form);
+            };
+
+            modeRoot.DropDownItems.Add(floatBarMode);
 
 
             // =========================================================

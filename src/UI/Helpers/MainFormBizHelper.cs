@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -107,6 +107,7 @@ namespace LiteMonitor.src.UI.Helpers
 
         private void CheckAutoHide()
         {
+            return; // 彻底废除旧版贴边隐藏
             if (!_cfg.AutoHide) return;
             if (!_form.Visible) return;
             if (IsDragging || _form.ContextMenuStrip?.Visible == true) return;
@@ -176,7 +177,7 @@ namespace LiteMonitor.src.UI.Helpers
             {
                 if (e.Button == MouseButtons.Left) 
                 {
-                    if (_form.Visible) ((MainForm)_form).HideMainWindow();
+                    if (!_cfg.HideMainForm) ((MainForm)_form).HideMainWindow();
                     else ((MainForm)_form).ShowMainWindow();
                 }
             };
@@ -236,6 +237,7 @@ namespace LiteMonitor.src.UI.Helpers
 
         public void RestorePos()
         {
+            return; // 彻底废除旧版位置恢复
             Screen? savedScreen = null;
             if (!string.IsNullOrEmpty(_cfg.ScreenDevice))
             {
@@ -271,6 +273,7 @@ namespace LiteMonitor.src.UI.Helpers
 
         public void ClampToScreen(bool force = false)
         {
+            return;
             if (!_cfg.ClampToScreen && !force) return;
 
             var area = Screen.FromControl(_form).WorkingArea;

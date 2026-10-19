@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices; // [Added] For P/Invoke
@@ -209,6 +209,24 @@ namespace LiteMonitor.src.SystemServices.InfoService
             }
         }
 
+        /// <summary>
+        /// 鑾峰彇鏍″噯鍚庣殑绯荤粺寮€鏈鸿繍琛屾椂闂?(宸叉帓闄ゅ揩閫熷惎鍔ㄦ畫鐣欎笌浼戠湢)
+        /// </summary>
+        public TimeSpan GetUptimeTimeSpan()
+        {
+            try 
+            {
+                if (QueryUnbiasedInterruptTime(out ulong ticks))
+                {
+                    long realTicks = (long)ticks - _uptimeOffsetTicks;
+                    if (realTicks < 0) realTicks = 0;
+                    return TimeSpan.FromTicks(realTicks);
+                }
+            }
+            catch { }
+            return TimeSpan.FromMilliseconds(Environment.TickCount64);
+        }
+
         private void UpdateTimeInfo()
         {
             var now = DateTime.Now;
@@ -224,29 +242,7 @@ namespace LiteMonitor.src.SystemServices.InfoService
             }
 
             // Uptime
-            // [Optimization] Update every minute, hide seconds
-            // [Fix] 改用 QueryUnbiasedInterruptTime (不含休眠) 替代 Environment.TickCount64 (含休眠)
-            TimeSpan ts;
-            try 
-            {
-                if (QueryUnbiasedInterruptTime(out ulong ticks))
-                {
-                    // [Fix] 减去快速启动导致的偏差
-                    long realTicks = (long)ticks - _uptimeOffsetTicks;
-                    if (realTicks < 0) realTicks = 0;
-                    ts = TimeSpan.FromTicks(realTicks);
-                }
-                else
-                {
-                    // Fallback (虽然理论上不会失败)
-                    // TickCount64 无法排除休眠，也无法处理快启，但作为保底
-                    ts = TimeSpan.FromMilliseconds(Environment.TickCount64);
-                }
-            }
-            catch 
-            {
-                 ts = TimeSpan.FromMilliseconds(Environment.TickCount64);
-            }
+            TimeSpan ts = GetUptimeTimeSpan();
             
             if (now.Minute != _lastUptimeMinute || string.IsNullOrEmpty(_lastUptimeStr))
             {
@@ -255,13 +251,13 @@ namespace LiteMonitor.src.SystemServices.InfoService
                 if (ts.TotalDays < 1)
                 {
                     _lastUptimeStr = LanguageManager.CurrentLang == "zh"
-                        ? $"{ts.Hours}时 {ts.Minutes}分"
+                        ? $"{ts.Hours}\u5c0f\u65f6 {ts.Minutes}\u5206"
                         : $"{ts.Hours}h {ts.Minutes}m";
                 }
                 else
                 {
                     _lastUptimeStr = LanguageManager.CurrentLang == "zh"
-                        ? $"{(int)ts.TotalDays}天 {ts.Hours}时 {ts.Minutes}分"
+                        ? $"{(int)ts.TotalDays}\u5929 {ts.Hours}\u5c0f\u65f6 {ts.Minutes}\u5206"
                         : $"{(int)ts.TotalDays}d {ts.Hours}h {ts.Minutes}m";
                 }
                 

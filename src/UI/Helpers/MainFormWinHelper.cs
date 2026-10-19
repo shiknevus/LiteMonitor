@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
@@ -189,6 +189,18 @@ namespace LiteMonitor.src.UI.Helpers
             }
             return msgId;
         }
+
+        public static int RegisterShowInstanceMessage()
+        {
+            int msgId = RegisterWindowMessage("LiteMonitor_ShowInstance_Message");
+            if (msgId != 0)
+            {
+                ChangeWindowMessageFilter((uint)msgId, MSGFLT_ADD);
+            }
+            return msgId;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
         [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);

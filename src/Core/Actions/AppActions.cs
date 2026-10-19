@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using LiteMonitor.src.UI;
@@ -126,11 +126,12 @@ namespace LiteMonitor.src.Core.Actions
 
             // 2. 主窗口
             // HideMainForm = true 意味着我们要执行 Hide()
-            if (cfg.HideMainForm) form.Hide();
+            if (cfg.HideMainForm) { form.Opacity = 0; form.Location = new System.Drawing.Point(-20000, -20000); }
             else form.Show();
 
             // 3. 任务栏窗口
             form.ToggleTaskbar(cfg.ShowTaskbar);
+            form.ToggleFloatBar(cfg.FloatBarEnabled);
             
             // 4. 刷新菜单
             // 因为可见性改变可能影响菜单项的勾选状态（尤其是防呆逻辑修正后），也可能影响“任务栏显示”等选项的状态

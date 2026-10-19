@@ -141,6 +141,10 @@ namespace LiteMonitor
                 // 2. 确定最终单位 (自动处理：用户设为Null时用默认，否则用自定义)
                 string finalUnit = MetricUtils.GetDisplayUnit(Key, defUnit, userFormat);
 
+                CachedValueText = TextValue;
+                CachedUnitText = finalUnit;
+                HasCustomUnit = !string.IsNullOrEmpty(userFormat);
+
                 // 3. 智能拼接：如果文本里还没包含这个单位，就拼上去
                 if (!string.IsNullOrEmpty(finalUnit) && !TextValue.EndsWith(finalUnit))
                 {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Drawing;
@@ -28,6 +28,14 @@ namespace LiteMonitor
         public int PanelWidth { get; set; } = 240;
         public double UIScale { get; set; } = 1.0;
 
+        // ====== 灵动悬浮条(FloatBar) ======
+        public bool FloatBarEnabled { get; set; } = true;
+        public bool FloatBarPinned { get; set; } = false;
+        public bool FloatBarAutoHide { get; set; } = true;
+        public string FloatBarPosition { get; set; } = "top_center";
+        public int FloatBarCustomX { get; set; } = -1;
+        public int FloatBarCustomY { get; set; } = -1;
+
         // ====== 硬件相关 ======
         public string PreferredNetwork { get; set; } = "";
         public string LastAutoNetwork { get; set; } = "";
@@ -48,7 +56,7 @@ namespace LiteMonitor
         public bool ShowTaskbar { get; set; } = true;
         // ★★★ 新增：横条模式是否跟随任务栏布局？ ★★★
         public bool HorizontalFollowsTaskbar { get; set; } = false;
-        public bool HideMainForm { get; set; } = false;
+        public bool HideMainForm { get; set; } = true;
         public bool HideTrayIcon { get; set; } = false;
         public bool TaskbarAlignLeft { get; set; } = true;
         
