@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using LiteMonitor.src.Core;
-using LiteMonitor.src.SystemServices;
+using LiteMonitor.src.UI;
 
 namespace LiteMonitor
 {
@@ -15,49 +15,36 @@ namespace LiteMonitor
         static void Main()
         {
             bool createNew;
-            string mutexName;
+            string mutexName = "Global\\LiteMonitor_SingleInstance_Mutex_UniqueKey";
 
             try
             {
                 string? exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-
-                if (string.IsNullOrEmpty(exePath))
-                {
-                    mutexName = "Global\\LiteMonitor_SingleInstance_Mutex_UniqueKey";
-                }
-                else
+                if (!string.IsNullOrEmpty(exePath))
                 {
                     string? appFolderPath = Path.GetDirectoryName(exePath);
-
                     string? sanitizedPath = appFolderPath?.ToLower()
                                                         .Replace('\\', '_')
                                                         .Replace(':', '_')
                                                         .Replace('/', '_')
                                                         .Replace(' ', '_');
 
-                    string baseName = $"Global\\LiteMonitor_SingleInstance_{sanitizedPath}_Mutex";
-                    if (baseName.Length > 250) 
-                    {
-                         baseName = $"Global\\LiteMonitor_SingleInstance_{sanitizedPath.GetHashCode()}_Mutex";
-                    }
-                    
-                    mutexName = baseName;
+                    mutexName = $"Global\\LiteMonitor_SingleInstance_{sanitizedPath}_Mutex";
                 }
 
                 _mutex = new Mutex(true, mutexName, out createNew);
             }
             catch
             {
-                mutexName = "Global\\LiteMonitor_SingleInstance_Mutex_UniqueKey";
                 _mutex = new Mutex(true, mutexName, out createNew);
             }
 
             if (!createNew)
             {
-                int showMsg = LiteMonitor.src.UI.Helpers.MainFormWinHelper.RegisterShowInstanceMessage();
+                int showMsg = FloatBarForm.WM_SHOW_ME;
                 if (showMsg != 0)
                 {
-                    LiteMonitor.src.UI.Helpers.MainFormWinHelper.PostMessage((IntPtr)0xffff, (uint)showMsg, IntPtr.Zero, IntPtr.Zero);
+                    FloatBarForm.PostMessage((IntPtr)0xffff, (uint)showMsg, IntPtr.Zero, IntPtr.Zero);
                 }
                 return;
             }
@@ -69,13 +56,13 @@ namespace LiteMonitor
             try
             {
                 ApplicationConfiguration.Initialize();
-                try
+                using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero))
                 {
-                    DriverInstaller.CheckPawnIOBeforeHardware(Settings.Load());
+                    UIUtils.ScaleFactor = g.DpiX / 96f;
                 }
-                catch { }
-
-                Application.Run(new MainForm());
+                TrafficLogger.Load();
+                System.Threading.Tasks.Task.Run(LiteMonitor.src.SystemServices.AutoStart.RepairStalePath);
+                Application.Run(new FloatBarForm());
             }
             catch (Exception ex)
             {
@@ -83,12 +70,7 @@ namespace LiteMonitor
             }
             finally
             {
-                try 
-                {
-                    FpsCounter.ForceKillZombies(); 
-                }
-                catch { }
-
+                try { TrafficLogger.Save(); } catch { }
                 if (_mutex != null)
                 {
                     try { _mutex.ReleaseMutex(); } catch { }
@@ -113,7 +95,6 @@ namespace LiteMonitor
             try
             {
                 string logPath = Path.Combine(AppContext.BaseDirectory, "LiteMonitor_Error.log");
-                
                 string errorMsg = "==================================================\n" +
                                   $"[Time]: {DateTime.Now}\n" +
                                   $"[Source]: {source}\n" +
@@ -122,9 +103,8 @@ namespace LiteMonitor
                                   "==================================================\n\n";
 
                 File.AppendAllText(logPath, errorMsg);
-
-                MessageBox.Show($"程序遇到致命错误！\n错误日志已保存至：{logPath}\n\n原因：{ex.Message}", 
-                                "LiteMonitor Crash", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"程序发生异常已记录到日志: {logPath}\n\n原因: {ex.Message}", 
+                                "LiteMonitor 错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch 
             {
@@ -132,3 +112,4 @@ namespace LiteMonitor
         }
     }
 }
+

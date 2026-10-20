@@ -15,7 +15,7 @@ namespace LiteMonitor.src.SystemServices
         private readonly SensorMap _sensorMap;
         private readonly NetworkManager _networkManager;
         private readonly DiskManager _diskManager;
-        private readonly FpsCounter _fpsCounter;
+        
         private readonly object _lock;
         private readonly Dictionary<string, float> _lastValidMap; 
         
@@ -41,14 +41,14 @@ namespace LiteMonitor.src.SystemServices
         private string _lastPrefNet = "";
         private string _lastPrefGpu = "";
         
-        public HardwareValueProvider(Computer c, Settings s, SensorMap map, NetworkManager net, DiskManager disk, FpsCounter fpsCounter,PerformanceCounterManager perfManager, object syncLock, Dictionary<string, float> lastValid)
+        public HardwareValueProvider(Computer c, Settings s, SensorMap map, NetworkManager net, DiskManager disk, PerformanceCounterManager perfManager, object syncLock, Dictionary<string, float> lastValid)
         {
             _computer = c;
             _cfg = s;
             _sensorMap = map;
             _networkManager = net;
             _diskManager = disk;
-            _fpsCounter = fpsCounter;
+            
             _perfManager = perfManager;
             _lock = syncLock;
             _lastValidMap = lastValid;
@@ -439,7 +439,7 @@ namespace LiteMonitor.src.SystemServices
                         break;
 
                     case "FPS":
-                        result = _fpsCounter.GetFps();
+                        result = 0f;
                         break;
 
                     // 电池
@@ -578,3 +578,4 @@ namespace LiteMonitor.src.SystemServices
         }
     }
 }
+

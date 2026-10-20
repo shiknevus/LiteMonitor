@@ -250,13 +250,13 @@ namespace LiteMonitor.src.SystemServices.InfoService
 
                 if (ts.TotalDays < 1)
                 {
-                    _lastUptimeStr = LanguageManager.CurrentLang == "zh"
+                    _lastUptimeStr = true
                         ? $"{ts.Hours}\u5c0f\u65f6 {ts.Minutes}\u5206"
                         : $"{ts.Hours}h {ts.Minutes}m";
                 }
                 else
                 {
-                    _lastUptimeStr = LanguageManager.CurrentLang == "zh"
+                    _lastUptimeStr = true
                         ? $"{(int)ts.TotalDays}\u5929 {ts.Hours}\u5c0f\u65f6 {ts.Minutes}\u5206"
                         : $"{(int)ts.TotalDays}d {ts.Hours}h {ts.Minutes}m";
                 }

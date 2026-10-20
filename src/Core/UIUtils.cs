@@ -1,21 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Linq;
 
 namespace LiteMonitor.src.Core
 {
-    /// <summary>
-    /// LiteMonitor UI Utilities (Refactored)
-    /// Logic delegated to MetricUtils.
-    /// This class now focuses on GDI+ Rendering helpers and Resource Management.
-    /// </summary>
     public static class UIUtils
     {
-        // ============================================================
-        // 1. String Interning (Memory Optimization)
-        // ============================================================
         private static readonly Dictionary<string, string> _stringPool = new(StringComparer.Ordinal);
         private static readonly object _poolLock = new object();
 
@@ -35,9 +26,6 @@ namespace LiteMonitor.src.Core
             lock (_poolLock) _stringPool.Clear();
         }
 
-        // ============================================================
-        // 2. DPI Scaling
-        // ============================================================
         public static float ScaleFactor { get; set; } = 1.0f;
 
         public static int S(int px) => (int)(px * ScaleFactor);
@@ -45,9 +33,6 @@ namespace LiteMonitor.src.Core
         public static Size S(Size size) => new Size(S(size.Width), S(size.Height));
         public static Padding S(Padding p) => new Padding(S(p.Left), S(p.Top), S(p.Right), S(p.Bottom));
 
-        // ============================================================
-        // 3. GDI+ Resource Cache (Brushes & Fonts)
-        // ============================================================
         private static readonly Dictionary<string, SolidBrush> _brushCache = new(16);
         private static readonly Dictionary<string, Pen> _penCache = new(16);
         private static readonly Dictionary<string, Font> _fontCache = new(16);
@@ -81,11 +66,9 @@ namespace LiteMonitor.src.Core
             {
                 if (!_brushCache.TryGetValue(color, out var br))
                 {
-                    // Cache eviction policy
                     if (_brushCache.Count >= MAX_BRUSH_CACHE)
                     {
-                        var keysToRemove = _brushCache.Keys.Take(_brushCache.Count / 2).ToList();
-                        foreach (var k in keysToRemove)
+                        foreach (var k in new List<string>(_brushCache.Keys))
                         {
                             if (_brushCache.TryGetValue(k, out var oldBrush))
                             {
@@ -95,10 +78,23 @@ namespace LiteMonitor.src.Core
                         }
                     }
 
-                    br = new SolidBrush(ThemeManager.ParseColor(color));
+                    br = new SolidBrush(ParseColor(color));
                     _brushCache[color] = br;
                 }
                 return br;
+            }
+        }
+
+        public static Color ParseColor(string hex)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(hex)) return Color.White;
+                return ColorTranslator.FromHtml(hex);
+            }
+            catch
+            {
+                return Color.White;
             }
         }
 
@@ -139,21 +135,6 @@ namespace LiteMonitor.src.Core
             }
         }
 
-        // ============================================================
-        // 4. Theme Helpers
-        // ============================================================
-
-        public static Color GetStateColor(int state, Theme t, bool isValueText = true)
-        {
-            if (state == MetricUtils.STATE_CRIT) return ThemeManager.ParseColor(isValueText ? t.Color.ValueCrit : t.Color.BarHigh);
-            if (state == MetricUtils.STATE_WARN) return ThemeManager.ParseColor(isValueText ? t.Color.ValueWarn : t.Color.BarMid);
-            return ThemeManager.ParseColor(t.Color.ValueSafe);
-        }
-
-        // ============================================================
-        // 5. Drawing Helpers
-        // ============================================================
-
         public static GraphicsPath RoundRect(Rectangle r, int radius)
         {
             GraphicsPath p = new GraphicsPath();
@@ -183,40 +164,6 @@ namespace LiteMonitor.src.Core
             using var brush = new SolidBrush(c);
             using var path = RoundRect(r, radius);
             g.FillPath(brush, path);
-        }
-
-        public static void DrawBar(Graphics g, MetricItem item, Theme t)
-        {
-            if (item.BarRect.Width <= 0 || item.BarRect.Height <= 0) return;
-
-            // Background
-            using (var bgPath = RoundRect(item.BarRect, item.BarRect.Height / 2))
-            {
-                g.FillPath(GetBrush(t.Color.BarBackground), bgPath);
-            }
-
-            // 2. Value Bar
-            // [Refactor] CachedPercent already includes visual correction (min 5%, max 100%) via MetricUtils.GetProgressValue
-            double percent = item.CachedPercent; 
-            
-            int w = (int)(item.BarRect.Width * percent);
-            if (w < 1 && percent > 0) w = 1; // 绝对防御：只要有百分比，至少画1像素
-
-            // Color
-            Color barColor = GetStateColor(item.CachedColorState, t, false);
-
-            if (w > 0)
-            {
-                Rectangle bar = new Rectangle(item.BarRect.X, item.BarRect.Y, w, item.BarRect.Height);
-                if (bar.Width > 0 && bar.Height > 0)
-                {
-                    using (var fgPath = RoundRect(bar, bar.Height / 2))
-                    using (var brush = new SolidBrush(barColor))
-                    {
-                        g.FillPath(brush, fgPath);
-                    }
-                }
-            }
         }
     }
 }

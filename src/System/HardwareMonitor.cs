@@ -26,8 +26,8 @@ namespace LiteMonitor.src.SystemServices
         private readonly SensorMap _sensorMap;
         private readonly NetworkManager _networkManager;
         private readonly DiskManager _diskManager;
-        private readonly FpsCounter _fpsCounter;
-        private readonly DriverInstaller _driverInstaller;
+        
+        
         private readonly HardwareValueProvider _valueProvider;
 
         // 性能计数器管理器
@@ -92,8 +92,8 @@ namespace LiteMonitor.src.SystemServices
             _sensorMap = new SensorMap();
             _networkManager = new NetworkManager(_perfCounterManager);
             _diskManager = new DiskManager();
-            _driverInstaller = new DriverInstaller(cfg, ReloadComputerSafe, ReleaseComputerForDriverInstall);
-            _fpsCounter = new FpsCounter(_driverInstaller); // <--- 新增
+            
+             // <--- 鏂板
 
             // ★★★ [修改] 2. 将 Manager 注入给 ValueProvider ★★★
             _valueProvider = new HardwareValueProvider(
@@ -102,7 +102,7 @@ namespace LiteMonitor.src.SystemServices
                 _sensorMap, 
                 _networkManager, 
                 _diskManager, 
-                _fpsCounter, 
+                 
                 _perfCounterManager, 
                 _lock, 
                 _lastValidMap
@@ -123,7 +123,7 @@ namespace LiteMonitor.src.SystemServices
         public string GetNetworkIP() => _networkManager.GetCurrentIP();
 
         // ★★★ 新增：允许主程序手动触发驱动检查 (用于解决启动弹窗冲突) ★★★
-        public Task SmartCheckDriver() => _driverInstaller.SmartCheckDriver();
+        
 
         // ★★★ [新增] 动态刷新硬件配置 (热切换) ★★★
         public void RefreshHardwareConfig()
@@ -241,7 +241,7 @@ namespace LiteMonitor.src.SystemServices
                 }
                 
                 // 任务错峰执行 (调用 SystemOptimizer)
-                SystemOptimizer.RunMaintenanceTasks(_secondsCounter);
+                
                 
                 OnValuesUpdated?.Invoke();
             }
@@ -270,7 +270,7 @@ namespace LiteMonitor.src.SystemServices
             }
         }
 
-        public void CleanMemory(Action<int>? onProgress = null) => SystemOptimizer.CleanMemory(onProgress);
+        
 
         public void Dispose()
         {
@@ -291,7 +291,7 @@ namespace LiteMonitor.src.SystemServices
 
             _valueProvider.Dispose();
             _perfCounterManager.Dispose(); // ★★★ [新增] 释放计数器资源 ★★★
-            _fpsCounter.Dispose(); // <--- 新增
+             // <--- 鏂板
             _networkManager.ClearCache();
             _diskManager.ClearCache(); // 漏掉的，补上
         }
@@ -338,7 +338,7 @@ namespace LiteMonitor.src.SystemServices
 
                         // 优化 T1：启动后大扫除
                         GC.Collect(2, GCCollectionMode.Forced, true, true);
-                        SystemOptimizer.TrimWorkingSet();
+                        
                     });
                 }
                 catch (Exception ex)
@@ -425,7 +425,7 @@ namespace LiteMonitor.src.SystemServices
             
             // ★★★ [优化] 全量更新判断 ★★★
             // 如果开启了 WebServer，则需要强制更新所有硬件，因为网页端可能会查看主界面未开启的项目
-            bool forceAll = _cfg.WebServerEnabled;
+            bool forceAll = false;
 
             // 2. CPU: 总是需要 (因为 LHM 要读温度)
             bool needCpu = forceAll || _cfg.IsAnyEnabled("CPU");
@@ -500,37 +500,12 @@ namespace LiteMonitor.src.SystemServices
 
                 // 4. 优化 T1：重置后再次修剪内存
                 GC.Collect();
-                SystemOptimizer.TrimWorkingSet();
+                
             }
             catch { }
         }
 
-        private void ReleaseComputerForDriverInstall()
-        {
-            try
-            {
-                lock (_lock)
-                {
-                    _networkManager.ClearCache();
-                    _diskManager.ClearCache();
-                    _sensorMap.Clear();
-                    _valueProvider.ClearCache();
-                    HardwareScanner.ClearCache();
-
-                    try
-                    {
-                        _computer.Accept(new HardwareVisitor(h => { }));
-                        _computer.Close();
-                        _computer.Hardware.Clear();
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[DriverInstaller] 释放硬件监控失败: {ex.Message}");
-                    }
-                }
-            }
-            catch { }
-        }
+        
 
         // =========================================================
         // ★★★ 核心修复：禁用所有传感器的历史记录 ★★★
@@ -648,3 +623,5 @@ namespace LiteMonitor.src.SystemServices
         #endregion
     }
 }
+
+

@@ -1,6 +1,0 @@
-﻿{
-  "version": "1.3.7",
-  "changelog": "1，新增贴顶微光展开胶囊悬浮窗（FloatBar），支持动画展开、置顶与快捷操作\n2，新增已开机时间统计与展示\n3，流量统计区分今日上传与下载双向折线箭头指示\n4，优化程序启动与单实例进程管理，修复多项已知问题",
-  "releaseDate": "2026-10-20",
-  "downloadUrl": "https://github.com/shiknevus/LiteMonitor/releases"
-}

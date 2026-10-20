@@ -189,8 +189,10 @@ namespace LiteMonitor.src.Core
 
                 double totalGB = (key.IndexOf("MEM", StringComparison.OrdinalIgnoreCase) >= 0) ? Settings.DetectedRamTotalGB : Settings.DetectedGpuVramTotalGB;
                 
-                return (totalGB > 0 && value.HasValue) 
-                    ? FormatDataSizeParts((value.Value / 100.0) * totalGB * 1073741824.0, -1).unit 
+                // 总量未探测到时 GetValueStr 输出的是百分比，单位须一致
+                if (totalGB <= 0) return "%";
+                return value.HasValue
+                    ? FormatDataSizeParts((value.Value / 100.0) * totalGB * 1073741824.0, -1).unit
                     : "GB";
             }
             

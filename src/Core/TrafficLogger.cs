@@ -188,29 +188,5 @@ namespace LiteMonitor.src.Core
             }
             return (0, 0);
         }
-
-        // [新增] 删除指定日期的记录
-        public static void RemoveRecord(string dateKey)
-        {
-            bool changed;
-            lock (_dataLock)
-            {
-                Data.History ??= new Dictionary<string, DailyRecord>();
-                changed = Data.History.Remove(dateKey);
-            }
-
-            if (changed) Save(); // 立即保存更改
-        }
-
-        // [新增] 清空所有历史
-        public static void ClearHistory()
-        {
-            lock (_dataLock)
-            {
-                Data.History ??= new Dictionary<string, DailyRecord>();
-                Data.History.Clear();
-            }
-            Save();
-        }
     }
 }

@@ -1,9 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Security.Principal;
+using System.Linq;
 using System.Windows.Forms;
-using System.Xml.Linq; // 新增：用于 XDocument
+using System.Xml.Linq;
 
 namespace LiteMonitor.src.SystemServices
 {
@@ -15,7 +15,7 @@ namespace LiteMonitor.src.SystemServices
         {
             string exePath = Process.GetCurrentProcess().MainModule!.FileName!;
 
-            // 1. 网络路径拦截 (保留你的原始逻辑)
+            // 1. 网络路径拦截
             try
             {
                 string root = Path.GetPathRoot(exePath)!;
@@ -31,55 +31,43 @@ namespace LiteMonitor.src.SystemServices
             {
                 if (IsEnabledForCurrentExe(exePath)) return;
 
-                // 使用 XML 方案，这是唯一能同时满足 [不报PowerShell错误] + [实现电池启动] 的方案
+                // 使用 XML 方案配置 Windows 计划任务
                 string tempXmlPath = Path.Combine(Path.GetTempPath(), $"LiteMonitor_Task_{Guid.NewGuid()}.xml");
 
                 try
                 {
-                    // 生成 XML 内容 (修改为获取 XDocument 对象)
                     var doc = GetTaskXml(exePath);
-                    
-                    // 写入临时文件 (修改为 doc.Save，它会自动处理 UTF-16 编码)
                     doc.Save(tempXmlPath);
 
-                    // 调用 schtasks 导入 XML
-                    // /F: 强制覆盖
-                    // /TN: 任务名
-                    // /XML: 指定配置文件
                     var startInfo = new ProcessStartInfo
                     {
                         FileName = "schtasks.exe",
                         Arguments = $"/Create /TN \"{TaskName}\" /XML \"{tempXmlPath}\" /F",
                         CreateNoWindow = true,
-                        UseShellExecute = false // 必须为 false 才能配合 CreateNoWindow 隐藏窗口
+                        UseShellExecute = false
                     };
-                    
-                    using (var p = Process.Start(startInfo))
-                    {
-                        p?.WaitForExit();
-                        
-                        // 可选：检查退出码，如果非0则记录日志
-                        // if (p.ExitCode != 0) { ... }
-                    }
+
+                    using var p = Process.Start(startInfo);
+                    p?.WaitForExit();
+                    if (p != null && p.ExitCode != 0)
+                        MessageBox.Show($"创建计划任务失败 (schtasks 返回 {p.ExitCode})", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
                 catch (Exception ex)
                 {
-                    // 捕获所有 IO 或 进程异常
                     MessageBox.Show($"设置失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
                 finally
                 {
-                    // 确保无论是否出错，都尝试清理临时文件
                     try
                     {
                         if (File.Exists(tempXmlPath)) File.Delete(tempXmlPath);
                     }
-                    catch { /* 忽略删除失败，临时文件残留无害 */ }
+                    catch { }
                 }
             }
             else
             {
-                // 删除任务 (逻辑保持不变)
+                // 删除计划任务
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = "schtasks.exe",
@@ -87,32 +75,35 @@ namespace LiteMonitor.src.SystemServices
                     CreateNoWindow = true,
                     UseShellExecute = false
                 };
-                using (var p = Process.Start(startInfo))
-                {
-                    p?.WaitForExit();
-                }
+                using var p = Process.Start(startInfo);
+                p?.WaitForExit();
             }
         }
 
-        public static bool IsEnabled()
+        // 任务存在但指向别的路径(如旧版本目录)时视为未启用
+        public static bool IsEnabled() => IsEnabledForCurrentExe(Process.GetCurrentProcess().MainModule!.FileName!);
+
+        // 启动时修复：任务指向的 exe 已不存在则改指当前 exe
+        public static void RepairStalePath()
         {
             try
             {
-                var psi = new ProcessStartInfo("schtasks", $"/Query /TN \"{TaskName}\"")
-                {
-                    CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true
-                };
-                using (var p = Process.Start(psi))
-                {
-                    if (p == null) return false;
-                    p.WaitForExit();
-                    return p.ExitCode == 0;
-                }
+                var (exists, command, _) = QueryTask();
+                if (!exists || string.IsNullOrEmpty(command)) return;
+                string exePath = Process.GetCurrentProcess().MainModule!.FileName!;
+                if (string.Equals(command, exePath, StringComparison.OrdinalIgnoreCase) || File.Exists(command)) return;
+                Set(true);
             }
-            catch { return false; }
+            catch { }
         }
 
         private static bool IsEnabledForCurrentExe(string exePath)
+        {
+            var (exists, command, enabled) = QueryTask();
+            return exists && enabled && string.Equals(command, exePath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static (bool exists, string? command, bool enabled) QueryTask()
         {
             try
             {
@@ -123,48 +114,36 @@ namespace LiteMonitor.src.SystemServices
                     RedirectStandardOutput = true
                 };
 
-                using (var p = Process.Start(psi))
-                {
-                    if (p == null) return false;
+                using var p = Process.Start(psi);
+                if (p == null) return (false, null, false);
 
-                    string xml = p.StandardOutput.ReadToEnd();
-                    p.WaitForExit();
-                    if (p.ExitCode != 0 || string.IsNullOrWhiteSpace(xml)) return false;
+                string xml = p.StandardOutput.ReadToEnd();
+                p.WaitForExit();
+                if (p.ExitCode != 0 || string.IsNullOrWhiteSpace(xml)) return (false, null, false);
 
-                    var doc = XDocument.Parse(xml);
-                    var command = doc.Descendants()
-                        .FirstOrDefault(x => x.Name.LocalName == "Command")
-                        ?.Value;
-                    var enabled = doc.Descendants()
-                        .FirstOrDefault(x => x.Name.LocalName == "Enabled" &&
-                                             x.Parent?.Name.LocalName == "Settings")
-                        ?.Value;
+                var doc = XDocument.Parse(xml);
+                var command = doc.Descendants()
+                    .FirstOrDefault(x => x.Name.LocalName == "Command")
+                    ?.Value?.Trim().Trim('"');
+                var enabled = doc.Descendants()
+                    .FirstOrDefault(x => x.Name.LocalName == "Enabled" &&
+                                         x.Parent?.Name.LocalName == "Settings")
+                    ?.Value;
 
-                    // 如果任务被用户或系统禁用，即使命令路径一致，也不能跳过重建/启用。
-                    bool taskEnabled = !string.Equals(enabled, "false", StringComparison.OrdinalIgnoreCase);
-                    return taskEnabled && string.Equals(command, exePath, StringComparison.OrdinalIgnoreCase);
-                }
+                bool taskEnabled = !string.Equals(enabled, "false", StringComparison.OrdinalIgnoreCase);
+                return (true, command, taskEnabled);
             }
             catch
             {
-                return false;
+                return (false, null, false);
             }
         }
 
-        /// <summary>
-        /// 生成 XML 配置：完美复刻原始逻辑 + 增加高级电池/延迟设置
-        /// (已重构为 XDocument 方式)
-        /// </summary>
         private static XDocument GetTaskXml(string exePath)
         {
-            // 细节保留：获取工作目录，对应你原始代码的 /STRTIN
             string exeDir = Path.GetDirectoryName(exePath)!;
-
             XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
 
-            // 使用 XDocument 构建 XML
-            // 自动处理特殊字符转义（如路径中的 & ' 等）
-            // 自动处理编码声明 (UTF-16)
             var doc = new XDocument(
                 new XDeclaration("1.0", "UTF-16", null),
                 new XElement(ns + "Task",
@@ -215,7 +194,6 @@ namespace LiteMonitor.src.SystemServices
 
             return doc;
         }
-
-        // 原 EscapeXml 方法已移除，因 XDocument 会自动处理转义
     }
 }
+
